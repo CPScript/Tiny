@@ -1,3 +1,6 @@
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,10 +9,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define USE_MMAP 1          // Set to 1 for mmap(), 0 for sbrk()
-#define ALIGNMENT 16        // Memory alignment (16 bytes for x86-64)
-#define MIN_BLOCK_SIZE 32   // Minimum block size
-#define MMAP_THRESHOLD 128 * 1024  // Use mmap for allocations > 128KB
+#define USE_MMAP 1
+#define ALIGNMENT 16
+#define MIN_BLOCK_SIZE 32
+#define MMAP_THRESHOLD (128 * 1024)
 
 typedef enum {
     FIRST_FIT,
@@ -20,16 +23,15 @@ typedef enum {
 static alloc_strategy_t current_strategy = FIRST_FIT;
 
 typedef struct block_header {
-    size_t size;                    // Size of block (including header)
-    bool is_free;                   // Free flag
-    struct block_header *next;      // Next block in free list
-    struct block_header *prev;      // Previous block in free list
-    bool is_mmap;                   // Was allocated with mmap?
+    size_t size;
+    bool is_free;
+    struct block_header *next;
+    struct block_header *prev;
+    bool is_mmap;
 } block_header_t;
 
-/* Global variables YAYAYAYYAY YIPPY AYAYYAYAYYYYAYYYAYYYYA :\ */
 static block_header_t *free_list_head = NULL;
-static block_header_t *last_allocated = NULL;  // For next-fit
+static block_header_t *last_allocated = NULL;
 
 static inline size_t align_size(size_t size) {
     return (size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
@@ -43,7 +45,6 @@ static inline block_header_t *ptr_to_block(void *ptr) {
     return ((block_header_t *)ptr) - 1;
 }
 
-/* Request memory from OS using sbrk() */
 static block_header_t *request_space_sbrk(size_t size) {
     block_header_t *block;
     void *request;
@@ -52,7 +53,7 @@ static block_header_t *request_space_sbrk(size_t size) {
     
     request = sbrk(size);
     if (request == (void *)-1) {
-        return NULL;  // sbrk failed
+        return NULL;
     }
     
     block = (block_header_t *)request;
@@ -65,7 +66,6 @@ static block_header_t *request_space_sbrk(size_t size) {
     return block;
 }
 
-/* request memory from OS using mmap() */
 static block_header_t *request_space_mmap(size_t size) {
     size_t total_size = align_size(size + sizeof(block_header_t));
     
@@ -120,7 +120,7 @@ static void remove_from_free_list(block_header_t *block) {
 
 static block_header_t *coalesce(block_header_t *block) {
     if (block->is_mmap) {
-        return block;  // Can't coalesce mmap blocks
+        return block;
     }
     
     block_header_t *current = free_list_head;
@@ -134,18 +134,16 @@ static block_header_t *coalesce(block_header_t *block) {
         void *current_end = (char *)current + current->size;
         void *block_end = (char *)block + block->size;
         
-        // Coalesce with next block
         if (current_end == (void *)block) {
             remove_from_free_list(block);
             current->size += block->size;
-            return coalesce(current);  // Recursively coalesce
+            return coalesce(current);
         }
         
-        // Coalesce with previous block
         if (block_end == (void *)current) {
             remove_from_free_list(current);
             block->size += current->size;
-            return coalesce(block);  // Recursively coalesce
+            return coalesce(block);
         }
         
         current = current->next;
@@ -154,7 +152,6 @@ static block_header_t *coalesce(block_header_t *block) {
     return block;
 }
 
-/* Split block if it's larger than needed */
 static void split_block(block_header_t *block, size_t size) {
     size = align_size(size + sizeof(block_header_t));
     
@@ -244,7 +241,6 @@ void *tiny_alloc(size_t size) {
     size = align_size(size);
     size_t total_size = size + sizeof(block_header_t);
     
-    // For large allocations, use mmap
     if (USE_MMAP && size >= MMAP_THRESHOLD) {
         block_header_t *block = request_space_mmap(size);
         if (block == NULL) {
@@ -253,11 +249,9 @@ void *tiny_alloc(size_t size) {
         return block_to_ptr(block);
     }
     
-    // Try to find a free block
     block_header_t *block = find_free_block(total_size);
     
     if (block != NULL) {
-        // Found a free block
         remove_from_free_list(block);
         split_block(block, size);
         block->is_free = false;
@@ -265,12 +259,7 @@ void *tiny_alloc(size_t size) {
         return block_to_ptr(block);
     }
     
-    // No block found, request more memory
-#if USE_MMAP
-    block = request_space_mmap(size);
-#else
     block = request_space_sbrk(size);
-#endif
     
     if (block == NULL) {
         return NULL;
@@ -320,7 +309,7 @@ void *tiny_realloc(void *ptr, size_t size) {
     block_header_t *block = ptr_to_block(ptr);
     
     if (block->size - sizeof(block_header_t) >= size) {
-        return ptr;  // Current block should be large enough
+        return ptr;
     }
     
     void *new_ptr = tiny_alloc(size);
@@ -369,7 +358,6 @@ void tiny_print_stats(void) {
     printf("=======================\n\n");
 }
 
-/* Test program*/
 int main(void) {
     printf("Tiny Memory Allocator Test\n");
     printf("Using %s for memory allocation\n\n", USE_MMAP ? "mmap()" : "sbrk()");
@@ -384,10 +372,10 @@ int main(void) {
     strcpy(p1, "Hello, World!");
     printf("p1: %s\n", p1);
     
-    tiny_free(p2);  // Free middle block
+    tiny_free(p2);
     tiny_print_stats();
     
-    char *p4 = tiny_alloc(50);  // Should use freed p2 space
+    char *p4 = tiny_alloc(50);
     tiny_print_stats();
     
     tiny_free(p1);
@@ -404,7 +392,7 @@ int main(void) {
     tiny_free(b1);
     tiny_free(b3);
     
-    char *b4 = tiny_alloc(150);  // should use b3 (best fit)
+    char *b4 = tiny_alloc(150);
     tiny_print_stats();
     
     tiny_free(b2);
@@ -420,7 +408,7 @@ int main(void) {
     
     tiny_free(c1);
     tiny_free(c3);
-    tiny_free(c2);  // Should coalesce all three :3
+    tiny_free(c2);
     
     printf("After freeing (should coalesce):\n");
     tiny_print_stats();
