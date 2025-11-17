@@ -97,3 +97,29 @@ The included test program demonstrates:
 ## License
 
 Public, have fun.
+
+
+---
+
+## Results
+
+**FIRST-FIT Test**:
+- Allocated 3 blocks (100, 200, 150 bytes)
+- Freed middle block (200 bytes) > free list shows 256 bytes (200 + header, rounded)
+- Allocated 50 bytes > reused the freed block, leaving 144 bytes remaining after split
+
+**BEST-FIT Test**:
+- Allocated 3 blocks (100, 500, 200 bytes)
+- Freed blocks 1 and 3 (100 and 200 bytes)
+- Allocated 150 bytes > best-fit selected the 200-byte block (closest match)
+- Free list shows 416 bytes (unused portion from previous test + freed 500-byte block)
+
+**COALESCING Test**:
+- Started with 704 bytes free (carryover from previous tests)
+- Allocated 3×100 byte blocks
+- Freed all three blocks in non-sequential order (c1, c3, c2)
+- **Coalescing worked**: Final free list shows 1184 bytes as a single merged block (704 + 3×160 = 1184)
+  - Each 100-byte allocation becomes ~160 bytes with header and alignment
+  - All three blocks merged with existing free memory into one contiguous block
+
+<img width="398" height="601" alt="image" src="https://github.com/user-attachments/assets/9164a857-15c3-4810-8ae8-03d47ab39cfd" />
